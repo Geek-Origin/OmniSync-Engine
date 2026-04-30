@@ -4,52 +4,49 @@ import com.github.shyiko.mysql.binlog.BinaryLogClient;
 import com.github.shyiko.mysql.binlog.event.Event;
 import com.github.shyiko.mysql.binlog.event.EventType;
 import io.netty.channel.Channel;
-import org.example.engine.client.OmniSyncClient; // 引入刚才改造的 Client
+import org.example.engine.client.OmniSyncClient;
 
 public class MySQLBinlogListener {
 
     private static final String DB_HOST = "127.0.0.1";
     private static final int DB_PORT = 3306;
     private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "123456"; // ⚠️ 别忘了改回来！
+    // ⚠️ 注意：修改为你真实的 MySQL 密码！
+    private static final String DB_PASSWORD = "123456";
 
-    public static void main(String[] args) {
-        try {
-            // 1. 先启动 Netty 客户端，打通网络管道！
-            Channel nettyChannel = OmniSyncClient.start();
+    // 直接在 main 方法上抛出异常，这是最简单的解决方式
+    public static void main(String[] args) throws Exception {
 
-            // 2. 创建 Binlog 客户端
-            BinaryLogClient client = new BinaryLogClient(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD);
+        // 1. 启动带有 SSL 双向加密的 Netty 客户端！
+        Channel nettyChannel = OmniSyncClient.start();
 
-            // 3. 注册事件监听器
-            client.registerEventListener(event -> {
-                Event data = event;
-                EventType type = data.getHeader().getEventType();
+        // 2. 创建 Binlog 客户端
+        BinaryLogClient client = new BinaryLogClient(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD);
 
-                String action = "";
-                if (EventType.isWrite(type)) {
-                    action = "🟢 [新增数据]";
-                } else if (EventType.isUpdate(type)) {
-                    action = "🟡 [修改数据]";
-                } else if (EventType.isDelete(type)) {
-                    action = "🔴 [删除数据]";
-                }
+        // 3. 注册事件监听器
+        client.registerEventListener(event -> {
+            Event data = event;
+            EventType type = data.getHeader().getEventType();
 
-                // 如果是我们关心的增删改操作
-                if (!action.isEmpty()) {
-                    String payload = action + " : " + data.getData();
-                    System.out.println("本机捕获: " + payload);
+            String action = "";
+            if (EventType.isWrite(type)) {
+                action = "🟢 [新增数据]";
+            } else if (EventType.isUpdate(type)) {
+                action = "🟡 [修改数据]";
+            } else if (EventType.isDelete(type)) {
+                action = "🔴 [删除数据]";
+            }
 
-                    // ✨ 核心合体：把捕获到的数据，通过 Netty 管道直接发给 Server 端！(记得加换行符防止粘包)
-                    nettyChannel.writeAndFlush(payload + "\n");
-                }
-            });
+            if (!action.isEmpty()) {
+                String payload = action + " : " + data.getData();
+                System.out.println("本机捕获: " + payload);
 
-            System.out.println("🕵️ OmniSync 数据捕获器启动！正在监听数据库变化...");
-            client.connect();
+                // ✨ 核心合体：把捕获到的数据，通过加密的 Netty 管道发给 Server！
+                nettyChannel.writeAndFlush(payload + "\n");
+            }
+        });
 
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        System.out.println("🕵️ OmniSync 安全数据捕获器启动！正在监听数据库变化...");
+        client.connect();
     }
 }
