@@ -12,6 +12,8 @@ import io.netty.handler.codec.string.StringEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.timeout.IdleStateHandler;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.TrustManagerFactory;
@@ -54,6 +56,9 @@ public class OmniSyncServer {
                         protected void initChannel(SocketChannel ch) {
                             // 🌟 4. 加密拦截器必须放在流水线的最前面！
                             ch.pipeline().addLast(sslContext.newHandler(ch.alloc()));
+
+                            //如果90秒内没有读到任何数据（包含心跳），触发读空闲事件
+                            ch.pipeline().addLast(new IdleStateHandler(90, 0, 0, TimeUnit.SECONDS));
 
                             ch.pipeline().addLast(new StringDecoder());
                             ch.pipeline().addLast(new StringEncoder());

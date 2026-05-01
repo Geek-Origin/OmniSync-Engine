@@ -30,19 +30,25 @@ public class MySQLBinlogListener {
 
             String action = "";
             if (EventType.isWrite(type)) {
-                action = "🟢 [新增数据]";
+                action = "INSERT";
             } else if (EventType.isUpdate(type)) {
-                action = "🟡 [修改数据]";
+                action = "UPDATE";
             } else if (EventType.isDelete(type)) {
-                action = "🔴 [删除数据]";
+                action = "DELETE";
             }
 
             if (!action.isEmpty()) {
-                String payload = action + " : " + data.getData();
-                System.out.println("本机捕获: " + payload);
+                // ✨ 1. 将抓取到的数据，封装进我们定义的标准数据包中
+                org.example.engine.common.SyncPacket packet =
+                        new org.example.engine.common.SyncPacket(action, data.getData().toString());
 
-                // ✨ 核心合体：把捕获到的数据，通过加密的 Netty 管道发给 Server！
-                nettyChannel.writeAndFlush(payload + "\n");
+                // ✨ 2. 使用 Fastjson2 将 Java 对象瞬间转换成标准的 JSON 字符串
+                String jsonString = com.alibaba.fastjson2.JSON.toJSONString(packet);
+
+                System.out.println("📦 本机封装完毕，准备发送: " + jsonString);
+
+                // ✨ 3. 发送 JSON 字符串给 Netty Server
+                nettyChannel.writeAndFlush(jsonString + "\n");
             }
         });
 

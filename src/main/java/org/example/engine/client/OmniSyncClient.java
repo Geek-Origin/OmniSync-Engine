@@ -11,6 +11,8 @@ import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.timeout.IdleStateHandler;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.TrustManagerFactory;
@@ -50,6 +52,9 @@ public class OmniSyncClient {
                     protected void initChannel(SocketChannel ch) {
                         // 🌟 4. 添加 SSL 加密处理器
                         ch.pipeline().addLast(sslContext.newHandler(ch.alloc(), HOST, PORT));
+
+                        // 每 30 秒如果没有写操作，就触发一个写空闲事件
+                        ch.pipeline().addLast(new IdleStateHandler(0, 30, 0, TimeUnit.SECONDS));
 
                         ch.pipeline().addLast(new StringDecoder());
                         ch.pipeline().addLast(new StringEncoder());
