@@ -1,22 +1,44 @@
 package org.example.engine.server;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class OmniSyncServerHandler extends SimpleChannelInboundHandler<String> {
 
+    // ✨ 新增：初始化 Redis 连接池 (默认连接本地 6379 端口)
+    private static final JedisPool jedisPool = new JedisPool("localhost", 6379);
+
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, String msg) {
-        // ✨ 新增：拦截心跳包，不当做正常数据处理
+        // 1. 过滤心跳
         if (msg.contains("\"action\":\"PING\"")) {
-            System.out.println("💚 收到客户端心跳，连接健康。");
             return;
         }
 
+        // 2. 打印收到的原始数据
         System.out.println("[Server 接收到消息] : " + msg);
-        ctx.writeAndFlush("ACK: 已成功接收数据\n");
+
+        // 3. ✨ 真正的存储逻辑在这里！
+        try (Jedis jedis = jedisPool.getResource()) {
+            // 解析 JSON (需要引入 com.alibaba.fastjson2.JSONObject)
+            com.alibaba.fastjson2.JSONObject jsonObject = com.alibaba.fastjson2.JSON.parseObject(msg);
+            String action = jsonObject.getString("action");
+            long ts = jsonObject.getLongValue("timestamp");
+
+            // 存入 Redis
+            String key = "omnisync:data:" + action + ":" + ts;
+            jedis.setex(key, 86400, msg); // 缓存 24 小时
+
+            System.out.println("💾 已成功写入 Redis! Key: " + key);
+        } catch (Exception e) {
+            System.err.println("❌ 写入 Redis 失败: " + e.getMessage());
+        }
     }
 
     @Override
@@ -24,7 +46,6 @@ public class OmniSyncServerHandler extends SimpleChannelInboundHandler<String> {
         System.out.println("[系统通知] : 有一个新的节点接入了引擎！IP: " + ctx.channel().remoteAddress());
     }
 
-    // ✨ 新增：检测如果是长时间没有动静，就断开连接
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
